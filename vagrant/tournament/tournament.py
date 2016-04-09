@@ -6,35 +6,41 @@
 import psycopg2
 
 
-def connect():
-    """Connect to the PostgreSQL database.  Returns a database connection."""
-    return psycopg2.connect("dbname=tournament")
+# def connect():
+#     """Connect to the PostgreSQL database.  Returns a database connection."""
+#     return psycopg2.connect("dbname=tournament")
+
+
+def connect(database_name="tournament"):
+    try:
+        db = psycopg2.connect("dbname={}".format(database_name))
+        cursor = db.cursor()
+        return db, cursor
+    except:
+        print("Can't connect to the database.")
 
 
 def deleteMatches():
     """Remove all the match records from the database."""
-    db = connect()
-    c = db.cursor()
-    c.execute("DELETE FROM matches")
+    db, cursor = connect()
+    cursor.execute("DELETE FROM matches")
     db.commit()
     db.close()
 
 
 def deletePlayers():
     """Remove all the player records from the database."""
-    db = connect()
-    c = db.cursor()
-    c.execute("DELETE FROM players")
+    db, cursor = connect()
+    cursor.execute("DELETE FROM players")
     db.commit()
     db.close()
 
 
 def countPlayers():
     """Returns the number of players currently registered."""
-    db = connect()
-    c = db.cursor()
-    c.execute("SELECT count(*) AS num FROM players")
-    result = c.fetchone()
+    db, cursor = connect()
+    cursor.execute("SELECT count(*) AS num FROM players")
+    result = cursor.fetchone()
     db.close()
     return result[0]
 
@@ -48,9 +54,8 @@ def registerPlayer(name):
     Args:
       name: the player's full name (need not be unique).
     """
-    db = connect()
-    c = db.cursor()
-    c.execute("INSERT into players (name) values(%s)", (name,))
+    db, cursor = connect()
+    cursor.execute("INSERT into players (name) values(%s)", (name,))
     db.commit()
     db.close()
 
@@ -68,20 +73,15 @@ def playerStandings():
         wins: the number of matches the player has won
         matches: the number of matches the player has played
     """
-    db = connect()
-    c = db.cursor()
+    db, cursor = connect()
 
     # Execute query which selects the players and their win record,
     # sorted by wins
-    c.execute("""SELECT id, name, wins, SUM(wins+lost) AS matches FROM """
-              """(SELECT p.id, p.name, COUNT(w.winner) AS wins, """
-              """COUNT(l.loser) AS lost FROM players p """
-              """LEFT JOIN matches w ON p.id = w.winner """
-              """LEFT JOIN matches l ON p.id = l.loser """
-              """GROUP BY p.id) AS matches """
-              """GROUP BY id, name, wins ORDER BY wins DESC""")
+    cursor.execute("""SELECT id, name, wins, SUM(wins+lost) AS matches FROM """
+                   """player_results AS matches GROUP BY id, name, wins """
+                   """ORDER BY wins DESC""")
     playerStandings = [(int(row[0]), str(row[1]), int(row[2]), int(row[3]))
-                       for row in c.fetchall()
+                       for row in cursor.fetchall()
                        ]
     db.close()
     return playerStandings
@@ -94,10 +94,9 @@ def reportMatch(winner, loser):
       winner:  the id number of the player who won
       loser:  the id number of the player who lost
     """
-    db = connect()
-    c = db.cursor()
-    c.execute("INSERT into matches (winner, loser) values(%s,%s)",
-              (winner, loser))
+    db, cursor = connect()
+    cursor.execute("INSERT into matches (winner, loser) values(%s,%s)",
+                   (winner, loser))
     db.commit()
     db.close()
 
@@ -121,17 +120,24 @@ def swissPairings():
     # Get current playerstandings
     standings = playerStandings()
 
+    # Count players
+    number_of_players = len(standings)
+
+    # Check if the number of players is even
+    if number_of_players % 2 != 0:
+        print("Number of players is not even.")
+        return false
+
     # Initialize empty array
     SwissPairList = []
 
     # Create array foreach player with player-data
     players = [item[0:2] for item in standings]
-    player_count = len(players)
 
     index = 0
 
     # Create array with player-pairs
-    while (index < player_count):
+    while (index < number_of_players):
         member = players[index] + players[index+1]
         SwissPairList.append(member)
         index = index + 2
